@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/splash_screen.dart';
+import 'screens/username_screen.dart';
 
 class LoRaLinkApp extends StatelessWidget {
   const LoRaLinkApp({super.key});
@@ -10,7 +10,7 @@ class LoRaLinkApp extends StatelessWidget {
       title: 'LoRaLink',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(colorSchemeSeed: Colors.blue, useMaterial3: true),
-      home: SplashScreen(),
+      home: const UsernameScreen(),
     );
   }
 }

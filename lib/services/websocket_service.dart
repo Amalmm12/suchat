@@ -1,28 +1,57 @@
 import 'dart:convert';
-
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class WebSocketService {
   WebSocketChannel? _channel;
 
-  bool get isConnected => _channel != null;
+  /// Connect to ESP32 WebSocket server
+  void connect() {
+    try {
+      _channel = WebSocketChannel.connect(Uri.parse("ws://192.168.4.1/ws"));
 
-  void connect(String ip) {
-    _channel = WebSocketChannel.connect(Uri.parse('ws://$ip:81'));
+      print("Connected to ESP32 WebSocket");
+    } catch (e) {
+      print("Connection Failed: $e");
+    }
   }
 
+  /// Disconnect
   void disconnect() {
     _channel?.sink.close();
     _channel = null;
+
+    print("Disconnected");
   }
 
-  void sendMessage(String message) {
-    if (_channel == null) return;
+  /// Send a message
+  void send({required String sender, required String text}) {
+    if (_channel == null) {
+      print("WebSocket not connected");
+      return;
+    }
 
-    final data = {"type": "chat", "text": message};
+    final message = {
+      "sender": sender,
+      "text": text,
+      "time": DateTime.now().millisecondsSinceEpoch,
+    };
 
-    _channel!.sink.add(jsonEncode(data));
+    final jsonMessage = jsonEncode(message);
+
+    print("Sending: $jsonMessage");
+
+    _channel!.sink.add(jsonMessage);
   }
 
-  Stream get messages => _channel!.stream;
+  /// Incoming message stream
+  Stream<dynamic> get stream {
+    if (_channel == null) {
+      throw Exception("WebSocket is not connected.");
+    }
+
+    return _channel!.stream;
+  }
+
+  /// Check connection
+  bool get isConnected => _channel != null;
 }

@@ -1,21 +1,61 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+
 import '../models/message.dart';
+import '../services/websocket_service.dart';
 import '../widgets/message_bubble.dart';
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  final String username;
+
+  const ChatScreen({super.key, required this.username});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
 class _ChatScreenState extends State<ChatScreen> {
+  final WebSocketService socket = WebSocketService();
+
   final TextEditingController messageController = TextEditingController();
 
   final List<Message> messages = [];
 
   @override
+  void initState() {
+    super.initState();
+
+    socket.connect();
+
+    socket.stream.listen(
+      (data) {
+        print("Received: $data");
+
+        final json = jsonDecode(data);
+
+        setState(() {
+          messages.add(
+            Message(
+              text: json["text"],
+              isMe: json["sender"] == widget.username,
+              time: DateTime.now(),
+            ),
+          );
+        });
+      },
+      onError: (error) {
+        print("WebSocket Error: $error");
+      },
+      onDone: () {
+        print("WebSocket Closed");
+      },
+    );
+  }
+
+  @override
   void dispose() {
+    socket.disconnect();
     messageController.dispose();
     super.dispose();
   }
@@ -25,9 +65,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     if (text.isEmpty) return;
 
-    setState(() {
-      messages.add(Message(text: text, isMe: true, time: DateTime.now()));
-    });
+    socket.send(sender: widget.username, text: text);
 
     messageController.clear();
   }
@@ -35,7 +73,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("LoRaLink Chat")),
+      appBar: AppBar(title: Text(widget.username)),
       body: Column(
         children: [
           Expanded(
@@ -47,7 +85,6 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.all(10),
             child: Row(
@@ -62,9 +99,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     onSubmitted: (_) => sendMessage(),
                   ),
                 ),
-
                 const SizedBox(width: 10),
-
                 IconButton(
                   onPressed: sendMessage,
                   icon: const Icon(Icons.send, color: Colors.blue),
