@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'chat_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -11,12 +12,14 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
   final TextEditingController nameController = TextEditingController();
+  final FocusNode nameFocusNode = FocusNode();
 
-  late AnimationController animationController;
+  late final AnimationController animationController;
+  late final Animation<double> fadeAnimation;
+  late final Animation<double> scaleAnimation;
+  late final Animation<Offset> slideAnimation;
 
-  late Animation<double> fadeAnimation;
-  late Animation<double> scaleAnimation;
-  late Animation<Offset> slideAnimation;
+  bool isEntering = false;
 
   @override
   void initState() {
@@ -32,12 +35,12 @@ class _LoginScreenState extends State<LoginScreen>
       curve: Curves.easeOut,
     );
 
-    scaleAnimation = Tween<double>(begin: 0.85, end: 1.0).animate(
+    scaleAnimation = Tween<double>(begin: 0.88, end: 1.0).animate(
       CurvedAnimation(parent: animationController, curve: Curves.easeOutBack),
     );
 
     slideAnimation =
-        Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero).animate(
+        Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero).animate(
           CurvedAnimation(
             parent: animationController,
             curve: Curves.easeOutCubic,
@@ -51,27 +54,57 @@ class _LoginScreenState extends State<LoginScreen>
   void dispose() {
     animationController.dispose();
     nameController.dispose();
+    nameFocusNode.dispose();
     super.dispose();
   }
 
   void continueToChat() {
-    final name = nameController.text.trim();
+    if (isEntering) return;
+
+    final String name = nameController.text.trim();
 
     if (name.isEmpty) {
+      nameFocusNode.requestFocus();
+
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           content: const Row(
             children: [
               Icon(Icons.warning_amber_rounded, color: Colors.white),
               SizedBox(width: 10),
-              Text("Please enter your name"),
+              Expanded(child: Text("Please enter your name")),
             ],
           ),
+        ),
+      );
+
+      return;
+    }
+
+    if (name.length < 2) {
+      nameFocusNode.requestFocus();
+
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
           behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
           ),
-          margin: const EdgeInsets.all(16),
+          content: const Row(
+            children: [
+              Icon(Icons.info_outline_rounded, color: Colors.white),
+              SizedBox(width: 10),
+              Expanded(child: Text("Name must contain at least 2 characters")),
+            ],
+          ),
         ),
       );
 
@@ -80,20 +113,40 @@ class _LoginScreenState extends State<LoginScreen>
 
     FocusScope.of(context).unfocus();
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => ChatScreen(username: name)),
-    );
+    setState(() {
+      isEntering = true;
+    });
+
+    Future.delayed(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 450),
+          reverseTransitionDuration: const Duration(milliseconds: 300),
+          pageBuilder: (_, animation, __) => ChatScreen(username: name),
+          transitionsBuilder: (_, animation, __, child) {
+            return FadeTransition(
+              opacity: CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOut,
+              ),
+              child: child,
+            );
+          },
+        ),
+      );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
-          // ─────────────────────────────────────
-          // BACKGROUND
-          // ─────────────────────────────────────
+          // Background.
           Container(
             width: double.infinity,
             height: double.infinity,
@@ -110,9 +163,7 @@ class _LoginScreenState extends State<LoginScreen>
             ),
           ),
 
-          // ─────────────────────────────────────
-          // DECORATIVE CIRCLES
-          // ─────────────────────────────────────
+          // Decorative circles.
           Positioned(
             top: -100,
             right: -80,
@@ -131,12 +182,11 @@ class _LoginScreenState extends State<LoginScreen>
             child: _backgroundCircle(size: 130, opacity: 0.06),
           ),
 
-          // ─────────────────────────────────────
-          // CONTENT
-          // ─────────────────────────────────────
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
                   vertical: 30,
@@ -151,9 +201,7 @@ class _LoginScreenState extends State<LoginScreen>
                         constraints: const BoxConstraints(maxWidth: 480),
                         child: Column(
                           children: [
-                            // ─────────────────────────
-                            // LOGO
-                            // ─────────────────────────
+                            // Logo.
                             Container(
                               width: 115,
                               height: 115,
@@ -187,9 +235,6 @@ class _LoginScreenState extends State<LoginScreen>
 
                             const SizedBox(height: 24),
 
-                            // ─────────────────────────
-                            // APP NAME
-                            // ─────────────────────────
                             const Text(
                               "SuChat",
                               style: TextStyle(
@@ -214,9 +259,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                             const SizedBox(height: 32),
 
-                            // ─────────────────────────
-                            // LOGIN CARD
-                            // ─────────────────────────
+                            // Login card.
                             Container(
                               padding: const EdgeInsets.all(26),
                               decoration: BoxDecoration(
@@ -249,12 +292,12 @@ class _LoginScreenState extends State<LoginScreen>
                                     style: TextStyle(
                                       fontSize: 14,
                                       color: Colors.grey.shade600,
+                                      height: 1.4,
                                     ),
                                   ),
 
                                   const SizedBox(height: 25),
 
-                                  // NAME LABEL
                                   const Text(
                                     "Your name",
                                     style: TextStyle(
@@ -266,18 +309,21 @@ class _LoginScreenState extends State<LoginScreen>
 
                                   const SizedBox(height: 9),
 
-                                  // NAME FIELD
                                   TextField(
                                     controller: nameController,
+                                    focusNode: nameFocusNode,
+                                    enabled: !isEntering,
                                     textCapitalization:
                                         TextCapitalization.words,
                                     textInputAction: TextInputAction.done,
+                                    maxLength: 30,
                                     onSubmitted: (_) => continueToChat(),
                                     decoration: InputDecoration(
                                       hintText: "Enter your name",
                                       hintStyle: TextStyle(
                                         color: Colors.grey.shade500,
                                       ),
+                                      counterText: "",
                                       prefixIcon: const Icon(
                                         Icons.person_outline_rounded,
                                         color: Color(0xFF1565C0),
@@ -311,19 +357,22 @@ class _LoginScreenState extends State<LoginScreen>
 
                                   const SizedBox(height: 20),
 
-                                  // ─────────────────────
-                                  // CONTINUE BUTTON
-                                  // ─────────────────────
                                   SizedBox(
                                     width: double.infinity,
                                     height: 56,
                                     child: ElevatedButton(
-                                      onPressed: continueToChat,
+                                      onPressed: isEntering
+                                          ? null
+                                          : continueToChat,
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: const Color(
                                           0xFF1565C0,
                                         ),
                                         foregroundColor: Colors.white,
+                                        disabledBackgroundColor: const Color(
+                                          0xFF1565C0,
+                                        ),
+                                        disabledForegroundColor: Colors.white,
                                         elevation: 4,
                                         shadowColor: const Color(
                                           0xFF1565C0,
@@ -334,32 +383,49 @@ class _LoginScreenState extends State<LoginScreen>
                                           ),
                                         ),
                                       ),
-                                      child: const Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Text(
-                                            "Continue",
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          SizedBox(width: 10),
-                                          Icon(
-                                            Icons.arrow_forward_rounded,
-                                            size: 21,
-                                          ),
-                                        ],
+                                      child: AnimatedSwitcher(
+                                        duration: const Duration(
+                                          milliseconds: 200,
+                                        ),
+                                        child: isEntering
+                                            ? const SizedBox(
+                                                key: ValueKey("loading"),
+                                                width: 23,
+                                                height: 23,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2.5,
+                                                  valueColor:
+                                                      AlwaysStoppedAnimation<
+                                                        Color
+                                                      >(Colors.white),
+                                                ),
+                                              )
+                                            : const Row(
+                                                key: ValueKey("continue"),
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    "Continue",
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                  SizedBox(width: 10),
+                                                  Icon(
+                                                    Icons.arrow_forward_rounded,
+                                                    size: 21,
+                                                  ),
+                                                ],
+                                              ),
                                       ),
                                     ),
                                   ),
 
                                   const SizedBox(height: 20),
 
-                                  // ─────────────────────
-                                  // NETWORK STATUS
-                                  // ─────────────────────
                                   Container(
                                     width: double.infinity,
                                     padding: const EdgeInsets.symmetric(
@@ -402,9 +468,6 @@ class _LoginScreenState extends State<LoginScreen>
 
                             const SizedBox(height: 25),
 
-                            // ─────────────────────────
-                            // FOOTER
-                            // ─────────────────────────
                             const Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [

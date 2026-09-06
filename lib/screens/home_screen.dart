@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-
 import 'chat_screen.dart';
+import 'personal_chats_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String username;
@@ -14,7 +14,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController animationController;
-
   late Animation<double> fadeAnimation;
   late Animation<Offset> slideAnimation;
 
@@ -24,7 +23,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 700),
     );
 
     fadeAnimation = CurvedAnimation(
@@ -33,7 +32,7 @@ class _HomeScreenState extends State<HomeScreen>
     );
 
     slideAnimation =
-        Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero).animate(
+        Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero).animate(
           CurvedAnimation(
             parent: animationController,
             curve: Curves.easeOutCubic,
@@ -49,11 +48,16 @@ class _HomeScreenState extends State<HomeScreen>
     super.dispose();
   }
 
+  String get firstLetter {
+    if (widget.username.isEmpty) return "?";
+    return widget.username[0].toUpperCase();
+  }
+
   // ============================================================
-  // OPEN GROUP CHAT
+  // EVERYONE CHAT
   // ============================================================
 
-  void openGroupChat() {
+  void openEveryoneChat() {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => ChatScreen(username: widget.username)),
@@ -61,16 +65,29 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   // ============================================================
+  // PERSONAL CHAT
+  // ============================================================
+
+  void openPersonalChats() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PersonalChatsScreen(username: widget.username),
+      ),
+    );
+  }
+
+  // ============================================================
   // COMING SOON
   // ============================================================
 
-  void showComingSoon(String feature) {
+  void comingSoon(String name) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        content: Text("$feature is coming soon"),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: Text("$name will be available soon"),
       ),
     );
   }
@@ -80,26 +97,19 @@ class _HomeScreenState extends State<HomeScreen>
   // ============================================================
 
   Widget buildDrawer() {
-    final String firstLetter = widget.username.isNotEmpty
-        ? widget.username[0].toUpperCase()
-        : "?";
-
     return Drawer(
       backgroundColor: const Color(0xFFF7F9FC),
       child: SafeArea(
         child: Column(
           children: [
-            // ----------------------------------------------------
-            // PROFILE HEADER
-            // ----------------------------------------------------
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 28, 20, 25),
+              padding: const EdgeInsets.fromLTRB(22, 30, 22, 28),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
                     Color(0xFF0D47A1),
-                    Color(0xFF1565C0),
+                    Color(0xFF1976D2),
                     Color(0xFF42A5F5),
                   ],
                   begin: Alignment.topLeft,
@@ -123,13 +133,19 @@ class _HomeScreenState extends State<HomeScreen>
                           ),
                         ),
                       ),
-
                       const SizedBox(width: 14),
-
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            const Text(
+                              "Your profile",
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
                             Text(
                               widget.username,
                               maxLines: 1,
@@ -140,48 +156,28 @@ class _HomeScreenState extends State<HomeScreen>
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-
-                            const SizedBox(height: 5),
-
-                            const Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 4,
-                                  backgroundColor: Colors.greenAccent,
-                                ),
-                                SizedBox(width: 6),
-                                Text(
-                                  "Connected",
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
                           ],
                         ),
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 20),
-
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.14),
-                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                     child: const Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.wifi_rounded, color: Colors.white, size: 18),
+                        Icon(Icons.wifi_rounded, color: Colors.white, size: 17),
                         SizedBox(width: 8),
                         Text(
-                          "Local Wi-Fi network",
+                          "Local SuChat network",
                           style: TextStyle(color: Colors.white, fontSize: 12),
                         ),
                       ],
@@ -191,51 +187,33 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             ),
 
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
 
-            // ----------------------------------------------------
-            // CHATS SECTION
-            // ----------------------------------------------------
-            _drawerSectionTitle("MESSAGING"),
+            _drawerTitle("MESSAGING"),
 
             _drawerItem(
-              icon: Icons.chat_rounded,
-              title: "All Chats",
-              subtitle: "View your conversations",
+              icon: Icons.forum_rounded,
+              title: "Everyone",
+              subtitle: "Chat with everyone nearby",
               onTap: () {
                 Navigator.pop(context);
-                openGroupChat();
-              },
-            ),
-
-            _drawerItem(
-              icon: Icons.groups_rounded,
-              title: "Group Chat",
-              subtitle: "Chat with everyone",
-              onTap: () {
-                Navigator.pop(context);
-                openGroupChat();
+                openEveryoneChat();
               },
             ),
 
             _drawerItem(
               icon: Icons.person_rounded,
               title: "Personal Chat",
-              subtitle: "Chat with one person",
+              subtitle: "Private conversations",
               onTap: () {
                 Navigator.pop(context);
-                showPersonalChat();
+                openPersonalChats();
               },
             ),
 
-            const SizedBox(height: 8),
+            const Divider(height: 30, indent: 20, endIndent: 20),
 
-            const Divider(indent: 20, endIndent: 20),
-
-            // ----------------------------------------------------
-            // COMMUNICATION SECTION
-            // ----------------------------------------------------
-            _drawerSectionTitle("COMMUNICATION"),
+            _drawerTitle("COMMUNICATION"),
 
             _drawerItem(
               icon: Icons.location_on_rounded,
@@ -244,7 +222,7 @@ class _HomeScreenState extends State<HomeScreen>
               iconColor: Colors.red,
               onTap: () {
                 Navigator.pop(context);
-                showComingSoon("Location");
+                comingSoon("Location");
               },
             ),
 
@@ -255,7 +233,7 @@ class _HomeScreenState extends State<HomeScreen>
               iconColor: Colors.green,
               onTap: () {
                 Navigator.pop(context);
-                showComingSoon("Wi-Fi Calling");
+                comingSoon("Wi-Fi Calling");
               },
             ),
 
@@ -263,41 +241,34 @@ class _HomeScreenState extends State<HomeScreen>
 
             const Divider(indent: 20, endIndent: 20),
 
-            // ----------------------------------------------------
-            // SETTINGS
-            // ----------------------------------------------------
             _drawerItem(
               icon: Icons.settings_rounded,
               title: "Settings",
               subtitle: "App and network settings",
-              iconColor: Colors.grey.shade700,
+              iconColor: Colors.grey,
               onTap: () {
                 Navigator.pop(context);
-                showComingSoon("Settings");
+                comingSoon("Settings");
               },
             ),
 
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
 
             const Text(
-              "SuChat • Local communication",
+              "SuChat • Private local communication",
               style: TextStyle(color: Colors.grey, fontSize: 11),
             ),
 
-            const SizedBox(height: 18),
+            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
 
-  // ============================================================
-  // DRAWER SECTION TITLE
-  // ============================================================
-
-  Widget _drawerSectionTitle(String title) {
+  Widget _drawerTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 5),
+      padding: const EdgeInsets.fromLTRB(22, 8, 22, 6),
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(
@@ -313,10 +284,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ============================================================
-  // DRAWER ITEM
-  // ============================================================
-
   Widget _drawerItem({
     required IconData icon,
     required String title,
@@ -328,26 +295,23 @@ class _HomeScreenState extends State<HomeScreen>
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(16),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
             child: Row(
               children: [
                 Container(
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(13),
+                    color: iconColor.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(icon, color: iconColor, size: 22),
                 ),
-
                 const SizedBox(width: 13),
-
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -359,9 +323,7 @@ class _HomeScreenState extends State<HomeScreen>
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-
                       const SizedBox(height: 2),
-
                       Text(
                         subtitle,
                         style: TextStyle(
@@ -372,12 +334,7 @@ class _HomeScreenState extends State<HomeScreen>
                     ],
                   ),
                 ),
-
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: Colors.grey.shade400,
-                  size: 20,
-                ),
+                Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400),
               ],
             ),
           ),
@@ -387,177 +344,46 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   // ============================================================
-  // PERSONAL CHAT BOTTOM SHEET
-  // ============================================================
-
-  void showPersonalChat() {
-    showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: Colors.white,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 5, 20, 30),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Personal Chat",
-                  style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
-                ),
-
-                const SizedBox(height: 6),
-
-                Text(
-                  "Choose a person to start a private chat.",
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
-                ),
-
-                const SizedBox(height: 20),
-
-                // Temporary users
-                // We will replace these with
-                // real ESP32 connected users later.
-                _personTile(name: "Rahul", online: true),
-
-                _personTile(name: "Alex", online: true),
-
-                _personTile(name: "John", online: false),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // ============================================================
-  // PERSON TILE
-  // ============================================================
-
-  Widget _personTile({required String name, required bool online}) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(vertical: 4),
-      leading: Stack(
-        children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: const Color(0xFFE3F2FD),
-            child: Text(
-              name[0].toUpperCase(),
-              style: const TextStyle(
-                color: Color(0xFF1565C0),
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-
-          if (online)
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                width: 13,
-                height: 13,
-                decoration: BoxDecoration(
-                  color: Colors.green,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-              ),
-            ),
-        ],
-      ),
-
-      title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-
-      subtitle: Text(
-        online ? "Online" : "Offline",
-        style: TextStyle(
-          color: online ? Colors.green : Colors.grey,
-          fontSize: 12,
-        ),
-      ),
-
-      trailing: online
-          ? const Icon(
-              Icons.chat_bubble_outline_rounded,
-              color: Color(0xFF1565C0),
-            )
-          : null,
-
-      onTap: online
-          ? () {
-              Navigator.pop(context);
-
-              showComingSoon("Private chat with $name");
-            }
-          : null,
-    );
-  }
-
-  // ============================================================
-  // MAIN SCREEN
+  // BUILD
   // ============================================================
 
   @override
   Widget build(BuildContext context) {
-    final String firstLetter = widget.username.isNotEmpty
-        ? widget.username[0].toUpperCase()
-        : "?";
-
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FB),
-
-      // DRAWER
       drawer: buildDrawer(),
 
-      // APP BAR
       appBar: AppBar(
         backgroundColor: const Color(0xFF1565C0),
         foregroundColor: Colors.white,
         elevation: 0,
-
         title: const Row(
           children: [
-            Icon(Icons.chat_rounded),
+            Icon(Icons.forum_rounded),
             SizedBox(width: 10),
             Text("SuChat", style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
-
         actions: [
           IconButton(
-            onPressed: () {
-              showComingSoon("Settings");
-            },
+            onPressed: () => comingSoon("Settings"),
             icon: const Icon(Icons.settings_outlined),
           ),
         ],
       ),
 
-      // ========================================================
-      // BODY
-      // ========================================================
       body: FadeTransition(
         opacity: fadeAnimation,
         child: SlideTransition(
           position: slideAnimation,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.fromLTRB(18, 20, 18, 30),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ------------------------------------------------
-                // PROFILE CARD
-                // ------------------------------------------------
+                // ==================================================
+                // PROFILE
+                // ==================================================
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(20),
@@ -567,73 +393,56 @@ class _HomeScreenState extends State<HomeScreen>
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    borderRadius: BorderRadius.circular(26),
+                    borderRadius: BorderRadius.circular(28),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF1565C0).withOpacity(0.22),
-                        blurRadius: 20,
+                        color: const Color(0xFF1565C0).withValues(alpha: 0.22),
+                        blurRadius: 22,
                         offset: const Offset(0, 10),
                       ),
                     ],
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 29,
-                            backgroundColor: Colors.white,
-                            child: Text(
-                              firstLetter,
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1565C0),
+                      CircleAvatar(
+                        radius: 30,
+                        backgroundColor: Colors.white,
+                        child: Text(
+                          firstLetter,
+                          style: const TextStyle(
+                            color: Color(0xFF1565C0),
+                            fontSize: 25,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(width: 14),
+
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Welcome to SuChat",
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
                               ),
                             ),
-                          ),
-
-                          const SizedBox(width: 14),
-
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  "Welcome back",
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 13,
-                                  ),
-                                ),
-
-                                const SizedBox(height: 3),
-
-                                Text(
-                                  widget.username,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
+                            const SizedBox(height: 3),
+                            Text(
+                              widget.username,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 21,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.18),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Row(
+                            const SizedBox(height: 7),
+                            const Row(
                               children: [
                                 CircleAvatar(
                                   radius: 4,
@@ -641,23 +450,16 @@ class _HomeScreenState extends State<HomeScreen>
                                 ),
                                 SizedBox(width: 6),
                                 Text(
-                                  "Online",
+                                  "Local network ready",
                                   style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
+                                    color: Colors.white70,
+                                    fontSize: 11,
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      const Text(
-                        "You're connected to your local SuChat network.",
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -665,95 +467,84 @@ class _HomeScreenState extends State<HomeScreen>
 
                 const SizedBox(height: 28),
 
-                // ------------------------------------------------
-                // COMMUNICATION
-                // ------------------------------------------------
                 const Text(
-                  "Communication",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  "Messages",
+                  style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
                 ),
 
-                const SizedBox(height: 14),
+                const SizedBox(height: 5),
 
-                _buildFeatureCard(
-                  icon: Icons.chat_bubble_rounded,
-                  title: "Chats",
-                  subtitle: "Message devices on your network",
+                Text(
+                  "Choose how you want to communicate",
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                ),
+
+                const SizedBox(height: 16),
+
+                // ==================================================
+                // EVERYONE
+                // ==================================================
+                _featureCard(
+                  icon: Icons.forum_rounded,
+                  title: "Everyone",
+                  subtitle: "Chat with everyone connected nearby",
                   iconColor: const Color(0xFF1565C0),
-                  onTap: openGroupChat,
+                  onTap: openEveryoneChat,
+                  large: true,
                 ),
 
                 const SizedBox(height: 12),
 
-                _buildFeatureCard(
-                  icon: Icons.groups_rounded,
-                  title: "Group Chat",
-                  subtitle: "Chat with everyone connected",
-                  iconColor: const Color(0xFF7B1FA2),
-                  onTap: openGroupChat,
-                ),
-
-                const SizedBox(height: 12),
-
-                _buildFeatureCard(
+                // ==================================================
+                // PERSONAL
+                // ==================================================
+                _featureCard(
                   icon: Icons.person_rounded,
                   title: "Personal Chat",
-                  subtitle: "Chat privately with one person",
+                  subtitle: "Have a private conversation with someone",
                   iconColor: const Color(0xFF00897B),
-                  onTap: showPersonalChat,
-                ),
-
-                const SizedBox(height: 12),
-
-                _buildFeatureCard(
-                  icon: Icons.location_on_rounded,
-                  title: "Location",
-                  subtitle: "Share your current GPS location",
-                  iconColor: Colors.red,
-                  onTap: () {
-                    showComingSoon("Location");
-                  },
-                ),
-
-                const SizedBox(height: 12),
-
-                _buildFeatureCard(
-                  icon: Icons.call_rounded,
-                  title: "Wi-Fi Calling",
-                  subtitle: "Make calls over local Wi-Fi",
-                  iconColor: Colors.green,
-                  onTap: () {
-                    showComingSoon("Wi-Fi Calling");
-                  },
+                  onTap: openPersonalChats,
+                  large: true,
                 ),
 
                 const SizedBox(height: 28),
 
-                // ------------------------------------------------
-                // OTHER
-                // ------------------------------------------------
                 const Text(
-                  "Other",
+                  "More",
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
 
                 const SizedBox(height: 14),
 
-                _buildFeatureCard(
-                  icon: Icons.settings_rounded,
-                  title: "Settings",
-                  subtitle: "App and connection settings",
-                  iconColor: Colors.grey.shade700,
-                  onTap: () {
-                    showComingSoon("Settings");
-                  },
+                // ==================================================
+                // LOCATION
+                // ==================================================
+                _featureCard(
+                  icon: Icons.location_on_rounded,
+                  title: "Location",
+                  subtitle: "Share your GPS location",
+                  iconColor: Colors.red,
+                  onTap: () => comingSoon("Location"),
+                ),
+
+                const SizedBox(height: 12),
+
+                // ==================================================
+                // CALLING
+                // ==================================================
+                _featureCard(
+                  icon: Icons.call_rounded,
+                  title: "Wi-Fi Calling",
+                  subtitle: "Voice calls over the local network",
+                  iconColor: Colors.green,
+                  onTap: () => comingSoon("Wi-Fi Calling"),
                 ),
 
                 const SizedBox(height: 28),
 
-                // ------------------------------------------------
-                // NETWORK CARD
-                // ------------------------------------------------
+                // ==================================================
+                // NETWORK
+                // ==================================================
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(18),
@@ -762,9 +553,9 @@ class _HomeScreenState extends State<HomeScreen>
                     borderRadius: BorderRadius.circular(22),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 14,
+                        offset: const Offset(0, 5),
                       ),
                     ],
                   ),
@@ -776,7 +567,7 @@ class _HomeScreenState extends State<HomeScreen>
                           Icon(Icons.wifi_rounded, color: Color(0xFF1565C0)),
                           SizedBox(width: 10),
                           Text(
-                            "SuChat Network",
+                            "Local Network",
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -787,29 +578,33 @@ class _HomeScreenState extends State<HomeScreen>
 
                       const SizedBox(height: 16),
 
-                      _networkRow(Icons.wifi, "Connection", "Local Wi-Fi"),
+                      _networkRow(
+                        Icons.wifi_rounded,
+                        "Connection",
+                        "Local Wi-Fi",
+                      ),
 
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 11),
 
                       _networkRow(Icons.memory_rounded, "ESP32", "192.168.4.1"),
 
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 11),
 
                       _networkRow(
                         Icons.lock_outline_rounded,
-                        "Network",
-                        "Private",
+                        "Privacy",
+                        "Local only",
                       ),
                     ],
                   ),
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: 28),
 
                 const Center(
                   child: Text(
-                    "SuChat • Local communication",
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                    "SuChat • Private local communication",
+                    style: TextStyle(color: Colors.grey, fontSize: 11),
                   ),
                 ),
               ],
@@ -824,31 +619,32 @@ class _HomeScreenState extends State<HomeScreen>
   // FEATURE CARD
   // ============================================================
 
-  Widget _buildFeatureCard({
+  Widget _featureCard({
     required IconData icon,
     required String title,
     required String subtitle,
     required Color iconColor,
     required VoidCallback onTap,
+    bool large = false,
   }) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(22),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(22),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(large ? 18 : 16),
           child: Row(
             children: [
               Container(
-                width: 54,
-                height: 54,
+                width: large ? 58 : 52,
+                height: large ? 58 : 52,
                 decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(17),
+                  color: iconColor.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(18),
                 ),
-                child: Icon(icon, color: iconColor, size: 27),
+                child: Icon(icon, color: iconColor, size: large ? 29 : 25),
               ),
 
               const SizedBox(width: 15),
@@ -859,8 +655,8 @@ class _HomeScreenState extends State<HomeScreen>
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
-                        fontSize: 16,
+                      style: TextStyle(
+                        fontSize: large ? 17 : 15,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -870,7 +666,7 @@ class _HomeScreenState extends State<HomeScreen>
                     Text(
                       subtitle,
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 12,
                         color: Colors.grey.shade600,
                       ),
                     ),
@@ -878,10 +674,10 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
 
-              const Icon(
+              Icon(
                 Icons.arrow_forward_ios_rounded,
-                size: 16,
-                color: Colors.grey,
+                size: 15,
+                color: Colors.grey.shade400,
               ),
             ],
           ),
@@ -897,20 +693,20 @@ class _HomeScreenState extends State<HomeScreen>
   Widget _networkRow(IconData icon, String title, String value) {
     return Row(
       children: [
-        Icon(icon, size: 20, color: Colors.grey.shade600),
+        Icon(icon, size: 19, color: Colors.grey.shade600),
 
         const SizedBox(width: 12),
 
         Expanded(
           child: Text(
             title,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
           ),
         ),
 
         Text(
           value,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
         ),
       ],
     );

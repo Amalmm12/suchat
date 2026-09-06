@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/message.dart';
 import '../services/websocket_service.dart';
 import '../widgets/message_bubble.dart';
+import 'personal_chats_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String username;
@@ -20,15 +21,26 @@ class _ChatScreenState extends State<ChatScreen> {
 
   final TextEditingController messageController = TextEditingController();
 
+  final ScrollController scrollController = ScrollController();
+
   final List<Message> messages = [];
 
-  bool connected = false;
+  List<String> nearbyUsers = [];
+
+  bool esp32Connected = false;
+
+  // ============================================================
+  // INIT
+  // ============================================================
 
   @override
   void initState() {
     super.initState();
 
-    // Connect and register this username.
+    connectToSuChat();
+  }
+
+  void connectToSuChat() {
     socket.connect(username: widget.username);
 
     socket.stream.listen(
@@ -36,81 +48,111 @@ class _ChatScreenState extends State<ChatScreen> {
         debugPrint("ESP32 → $data");
 
         try {
-          final json = jsonDecode(data);
+          final dynamic decoded = jsonDecode(data);
+
+          if (decoded is! Map) {
+            return;
+          }
+
+          final Map<String, dynamic> json = Map<String, dynamic>.from(decoded);
 
           if (!mounted) return;
 
-          // ------------------------------------------
-          // USER LIST FROM ESP32
-          // ------------------------------------------
+          // ======================================================
+          // USERS
+          // ======================================================
 
           if (json["type"] == "users") {
-            debugPrint("Connected users: ${json["users"]}");
+            final List<dynamic> users = json["users"] ?? [];
+
+            final List<String> otherUsers = users
+                .map((user) => user.toString())
+                .where((user) => user.isNotEmpty && user != widget.username)
+                .toList();
 
             setState(() {
-              connected = true;
+              nearbyUsers = otherUsers;
+              esp32Connected = true;
             });
 
+            debugPrint("Nearby users: $nearbyUsers");
+
             return;
           }
 
-          // ------------------------------------------
-          // ERROR FROM ESP32
-          // ------------------------------------------
+          // ======================================================
+          // ERROR
+          // ======================================================
 
           if (json["type"] == "error") {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(json["message"] ?? "WebSocket error"),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
+            _showMessage(json["message"]?.toString() ?? "WebSocket error");
 
             return;
           }
 
-          // ------------------------------------------
-          // NORMAL EVERYONE MESSAGE
-          // ------------------------------------------
+          // ======================================================
+          // EVERYONE MESSAGE
+          // ======================================================
 
           if (json["type"] == "message") {
+            final String sender = json["sender"]?.toString() ?? "Unknown";
+
+            final String text = json["text"]?.toString() ?? "";
+
+            if (text.isEmpty) {
+              return;
+            }
+
             setState(() {
               messages.add(
                 Message(
-                  sender: json["sender"] ?? "Unknown",
-                  text: json["text"] ?? "",
-                  isMe: json["sender"] == widget.username,
+                  sender: sender,
+                  text: text,
+                  isMe: sender == widget.username,
                   time: _messageTime(json["time"]),
                 ),
               );
             });
 
+            _scrollToBottom();
+
             return;
           }
 
-          // ------------------------------------------
+          // ======================================================
           // PERSONAL MESSAGE
-          // ------------------------------------------
+          // ======================================================
 
           if (json["type"] == "personal") {
-            final sender = json["sender"] ?? "Unknown";
+            final String sender = json["sender"]?.toString() ?? "";
 
-            final receiver = json["receiver"] ?? "";
+            final String receiver = json["receiver"]?.toString() ?? "";
 
-            // Only display if this message belongs
-            // to this user.
-            if (sender == widget.username || receiver == widget.username) {
-              setState(() {
-                messages.add(
-                  Message(
-                    sender: sender,
-                    text: json["text"] ?? "",
-                    isMe: sender == widget.username,
-                    time: _messageTime(json["time"]),
-                  ),
-                );
-              });
+            final bool belongsToMe =
+                sender == widget.username || receiver == widget.username;
+
+            if (!belongsToMe) {
+              return;
             }
+
+            final String text = json["text"]?.toString() ?? "";
+
+            if (text.isEmpty) {
+              return;
+            }
+
+            setState(() {
+              messages.add(
+                Message(
+                  sender: sender,
+                  text: text,
+                  isMe: sender == widget.username,
+                  time: _messageTime(json["time"]),
+                ),
+              );
+            });
+
+            _scrollToBottom();
 
             return;
           }
@@ -118,39 +160,42 @@ class _ChatScreenState extends State<ChatScreen> {
           debugPrint("JSON parsing error: $e");
         }
       },
+
       onError: (error) {
-        debugPrint("WebSocket Error: $error");
+        debugPrint("WebSocket error: $error");
 
         if (!mounted) return;
 
         setState(() {
-          connected = false;
+          esp32Connected = false;
+          nearbyUsers.clear();
         });
       },
+
       onDone: () {
         debugPrint("WebSocket connection closed");
 
         if (!mounted) return;
 
         setState(() {
-          connected = false;
+          esp32Connected = false;
+          nearbyUsers.clear();
         });
       },
     );
 
-    // Give the connection a moment to establish.
     Future.delayed(const Duration(milliseconds: 500), () {
       if (!mounted) return;
 
       setState(() {
-        connected = socket.isConnected;
+        esp32Connected = socket.isConnected;
       });
     });
   }
 
-  // ------------------------------------------
+  // ============================================================
   // MESSAGE TIME
-  // ------------------------------------------
+  // ============================================================
 
   DateTime _messageTime(dynamic value) {
     if (value is int) {
@@ -160,36 +205,25 @@ class _ChatScreenState extends State<ChatScreen> {
     return DateTime.now();
   }
 
-  // ------------------------------------------
-  // DISPOSE
-  // ------------------------------------------
-
-  @override
-  void dispose() {
-    socket.disconnect();
-    messageController.dispose();
-
-    super.dispose();
-  }
-
-  // ------------------------------------------
-  // SEND EVERYONE MESSAGE
-  // ------------------------------------------
+  // ============================================================
+  // SEND MESSAGE
+  // ============================================================
 
   void sendMessage() {
-    final text = messageController.text.trim();
+    final String text = messageController.text.trim();
 
     if (text.isEmpty) {
       return;
     }
 
     if (!socket.isConnected) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Not connected to SuChat network"),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      _showMessage("SuChat is not connected");
+
+      return;
+    }
+
+    if (nearbyUsers.isEmpty) {
+      _showMessage("No nearby users connected");
 
       return;
     }
@@ -197,32 +231,96 @@ class _ChatScreenState extends State<ChatScreen> {
     socket.send(sender: widget.username, text: text);
 
     messageController.clear();
+
+    FocusScope.of(context).unfocus();
   }
 
-  // ------------------------------------------
-  // DRAWER PLACEHOLDER
-  // ------------------------------------------
+  // ============================================================
+  // OPEN PERSONAL CHATS
+  // ============================================================
 
-  void comingSoon(String title, IconData icon) {
+  void openPersonalChats() {
     Navigator.pop(context);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(icon, color: Colors.white),
-            const SizedBox(width: 10),
-            Text("$title coming soon"),
-          ],
-        ),
-        behavior: SnackBarBehavior.floating,
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PersonalChatsScreen(username: widget.username),
       ),
     );
   }
 
-  // ------------------------------------------
+  // ============================================================
+  // COMING SOON
+  // ============================================================
+
+  void comingSoon(String title, IconData icon) {
+    Navigator.pop(context);
+
+    _showMessage("$title coming soon", icon: icon);
+  }
+
+  // ============================================================
+  // SNACKBAR
+  // ============================================================
+
+  void _showMessage(String text, {IconData? icon}) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: Row(
+          children: [
+            if (icon != null) ...[
+              Icon(icon, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+            ],
+            Expanded(child: Text(text)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // SCROLL
+  // ============================================================
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!scrollController.hasClients) {
+        return;
+      }
+
+      scrollController.animateTo(
+        scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  // ============================================================
+  // DISPOSE
+  // ============================================================
+
+  @override
+  void dispose() {
+    messageController.dispose();
+    scrollController.dispose();
+    socket.disconnect();
+
+    super.dispose();
+  }
+
+  // ============================================================
   // BUILD
-  // ------------------------------------------
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -240,6 +338,7 @@ class _ChatScreenState extends State<ChatScreen> {
               child: messages.isEmpty
                   ? _buildEmptyChat()
                   : ListView.builder(
+                      controller: scrollController,
                       padding: const EdgeInsets.fromLTRB(10, 15, 10, 15),
                       itemCount: messages.length,
                       itemBuilder: (context, index) {
@@ -255,11 +354,30 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // ------------------------------------------
+  // ============================================================
   // HEADER
-  // ------------------------------------------
+  // ============================================================
 
   Widget _buildHeader() {
+    final bool hasNearbyUsers = nearbyUsers.isNotEmpty;
+
+    late String statusText;
+    late Color statusColor;
+
+    if (!esp32Connected) {
+      statusText = "Connecting to SuChat...";
+      statusColor = Colors.orange;
+    } else if (hasNearbyUsers) {
+      final int count = nearbyUsers.length;
+
+      statusText = count == 1 ? "1 person nearby" : "$count people nearby";
+
+      statusColor = Colors.green;
+    } else {
+      statusText = "Waiting for people nearby";
+      statusColor = Colors.orange;
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
       decoration: const BoxDecoration(
@@ -274,6 +392,7 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       child: Row(
         children: [
+          // MENU
           Builder(
             builder: (context) {
               return IconButton(
@@ -285,15 +404,16 @@ class _ChatScreenState extends State<ChatScreen> {
             },
           ),
 
+          // LOGO
           Container(
-            width: 42,
-            height: 42,
+            width: 43,
+            height: 43,
             decoration: BoxDecoration(
               color: const Color(0xFF1565C0),
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(14),
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(14),
               child: Image.asset(
                 "assets/logo.png",
                 fit: BoxFit.cover,
@@ -306,6 +426,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
           const SizedBox(width: 12),
 
+          // TITLE
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -324,19 +445,21 @@ class _ChatScreenState extends State<ChatScreen> {
                       height: 8,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: connected ? Colors.green : Colors.red,
+                        color: statusColor,
                       ),
                     ),
 
                     const SizedBox(width: 6),
 
-                    Text(
-                      connected ? "Connected" : "Disconnected",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: connected
-                            ? Colors.green.shade700
-                            : Colors.red.shade700,
+                    Flexible(
+                      child: Text(
+                        statusText,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: statusColor,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ],
@@ -345,6 +468,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
 
+          // USER AVATAR
           CircleAvatar(
             radius: 20,
             backgroundColor: const Color(0xFFE3F2FD),
@@ -363,21 +487,36 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // ------------------------------------------
+  // ============================================================
   // DRAWER
-  // ------------------------------------------
+  // ============================================================
 
   Widget _buildDrawer() {
+    final String letter = widget.username.isNotEmpty
+        ? widget.username[0].toUpperCase()
+        : "?";
+
+    final bool hasUsers = nearbyUsers.isNotEmpty;
+
     return Drawer(
+      backgroundColor: const Color(0xFFF7F9FC),
+
       child: SafeArea(
         child: Column(
           children: [
+            // ====================================================
+            // PROFILE
+            // ====================================================
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(22, 30, 22, 25),
+              padding: const EdgeInsets.fromLTRB(22, 30, 22, 27),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFF0D47A1), Color(0xFF42A5F5)],
+                  colors: [
+                    Color(0xFF0D47A1),
+                    Color(0xFF1976D2),
+                    Color(0xFF42A5F5),
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -389,9 +528,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     radius: 32,
                     backgroundColor: Colors.white,
                     child: Text(
-                      widget.username.isNotEmpty
-                          ? widget.username[0].toUpperCase()
-                          : "?",
+                      letter,
                       style: const TextStyle(
                         fontSize: 27,
                         fontWeight: FontWeight.bold,
@@ -404,13 +541,15 @@ class _ChatScreenState extends State<ChatScreen> {
 
                   const Text(
                     "SuChat",
-                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
 
                   const SizedBox(height: 3),
 
                   Text(
                     widget.username,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 22,
@@ -418,7 +557,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 9),
+                  const SizedBox(height: 10),
 
                   Row(
                     children: [
@@ -427,16 +566,18 @@ class _ChatScreenState extends State<ChatScreen> {
                         height: 8,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: connected
+                          color: hasUsers
                               ? Colors.greenAccent
-                              : Colors.redAccent,
+                              : Colors.orangeAccent,
                         ),
                       ),
 
                       const SizedBox(width: 7),
 
                       Text(
-                        connected ? "Connected" : "Disconnected",
+                        hasUsers
+                            ? "${nearbyUsers.length} nearby"
+                            : "No nearby users",
                         style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 12,
@@ -450,16 +591,18 @@ class _ChatScreenState extends State<ChatScreen> {
 
             const SizedBox(height: 10),
 
+            _drawerSection("MESSAGING"),
+
+            // PERSONAL
             _drawerItem(
               icon: Icons.person_rounded,
               title: "Personal Chats",
               subtitle: "Private conversations",
               color: const Color(0xFF1565C0),
-              onTap: () {
-                comingSoon("Personal Chats", Icons.person_rounded);
-              },
+              onTap: openPersonalChats,
             ),
 
+            // GROUPS
             _drawerItem(
               icon: Icons.groups_rounded,
               title: "Groups",
@@ -470,6 +613,7 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
 
+            // EVERYONE
             _drawerItem(
               icon: Icons.campaign_rounded,
               title: "Everyone",
@@ -482,6 +626,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
             const Divider(height: 28, indent: 20, endIndent: 20),
 
+            _drawerSection("COMMUNICATION"),
+
+            // LOCATION
             _drawerItem(
               icon: Icons.location_on_rounded,
               title: "Location",
@@ -492,6 +639,22 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
 
+            // CALLING
+            _drawerItem(
+              icon: Icons.call_rounded,
+              title: "Wi-Fi Calling",
+              subtitle: "Local voice calls",
+              color: Colors.green,
+              onTap: () {
+                comingSoon("Wi-Fi Calling", Icons.call_rounded);
+              },
+            ),
+
+            const Spacer(),
+
+            const Divider(indent: 20, endIndent: 20),
+
+            // SETTINGS
             _drawerItem(
               icon: Icons.settings_rounded,
               title: "Settings",
@@ -502,24 +665,45 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
 
-            const Spacer(),
+            const SizedBox(height: 12),
 
-            const Padding(
-              padding: EdgeInsets.all(20),
-              child: Text(
-                "SuChat • Local Communication",
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              ),
+            const Text(
+              "SuChat • Local Communication",
+              style: TextStyle(color: Colors.grey, fontSize: 11),
             ),
+
+            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
 
-  // ------------------------------------------
+  // ============================================================
+  // DRAWER SECTION
+  // ============================================================
+
+  Widget _drawerSection(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 7, 22, 6),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          title,
+          style: TextStyle(
+            color: Colors.grey.shade600,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
   // DRAWER ITEM
-  // ------------------------------------------
+  // ============================================================
 
   Widget _drawerItem({
     required IconData icon,
@@ -528,33 +712,70 @@ class _ChatScreenState extends State<ChatScreen> {
     required Color color,
     required VoidCallback onTap,
   }) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      leading: Container(
-        width: 45,
-        height: 45,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(14),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: color, size: 22),
+                ),
+
+                const SizedBox(width: 13),
+
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+
+                      const SizedBox(height: 2),
+
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400),
+              ],
+            ),
+          ),
         ),
-        child: Icon(icon, color: color),
       ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
-      trailing: const Icon(
-        Icons.arrow_forward_ios_rounded,
-        size: 15,
-        color: Colors.grey,
-      ),
-      onTap: onTap,
     );
   }
 
-  // ------------------------------------------
+  // ============================================================
   // EMPTY CHAT
-  // ------------------------------------------
+  // ============================================================
 
   Widget _buildEmptyChat() {
+    final bool hasUsers = nearbyUsers.isNotEmpty;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(30),
@@ -562,31 +783,37 @@ class _ChatScreenState extends State<ChatScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 90,
-              height: 90,
+              width: 92,
+              height: 92,
               decoration: BoxDecoration(
                 color: const Color(0xFFE3F2FD),
-                borderRadius: BorderRadius.circular(28),
+                borderRadius: BorderRadius.circular(30),
               ),
-              child: const Icon(
-                Icons.chat_bubble_outline_rounded,
-                size: 44,
-                color: Color(0xFF1565C0),
+              child: Icon(
+                hasUsers
+                    ? Icons.chat_bubble_outline_rounded
+                    : Icons.wifi_find_rounded,
+                size: 45,
+                color: const Color(0xFF1565C0),
               ),
             ),
 
-            const SizedBox(height: 20),
-
-            const Text(
-              "Everyone Chat",
-              style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
-            ),
-
-            const SizedBox(height: 7),
+            const SizedBox(height: 22),
 
             Text(
-              "Messages sent here are broadcast\n"
-              "to connected SuChat devices.",
+              hasUsers ? "Everyone Chat" : "Waiting for nearby users",
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
+            ),
+
+            const SizedBox(height: 9),
+
+            Text(
+              hasUsers
+                  ? "You can now communicate with\n"
+                        "people connected to SuChat."
+                  : "Connect another phone to the\n"
+                        "SuChat Wi-Fi network to start chatting.",
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
@@ -595,37 +822,39 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
 
-            const SizedBox(height: 18),
+            const SizedBox(height: 20),
 
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: connected
+                color: hasUsers
                     ? Colors.green.withValues(alpha: 0.08)
-                    : Colors.red.withValues(alpha: 0.08),
+                    : Colors.orange.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    connected ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-                    size: 17,
-                    color: connected
+                    hasUsers
+                        ? Icons.people_rounded
+                        : Icons.person_search_rounded,
+                    size: 18,
+                    color: hasUsers
                         ? Colors.green.shade700
-                        : Colors.red.shade700,
+                        : Colors.orange.shade700,
                   ),
 
                   const SizedBox(width: 7),
 
                   Text(
-                    connected ? "ESP32 connected" : "ESP32 disconnected",
+                    hasUsers ? "${nearbyUsers.length} nearby" : "Waiting...",
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: connected
+                      color: hasUsers
                           ? Colors.green.shade700
-                          : Colors.red.shade700,
+                          : Colors.orange.shade700,
                     ),
                   ),
                 ],
@@ -637,11 +866,13 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // ------------------------------------------
+  // ============================================================
   // MESSAGE COMPOSER
-  // ------------------------------------------
+  // ============================================================
 
   Widget _buildComposer() {
+    final bool canSend = esp32Connected && nearbyUsers.isNotEmpty;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       decoration: const BoxDecoration(
@@ -657,6 +888,7 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          // ADD BUTTON
           Container(
             width: 44,
             height: 44,
@@ -666,11 +898,9 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             child: IconButton(
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Attachments coming soon"),
-                    behavior: SnackBarBehavior.floating,
-                  ),
+                _showMessage(
+                  "Attachments coming soon",
+                  icon: Icons.attach_file_rounded,
                 );
               },
               icon: const Icon(Icons.add_rounded),
@@ -679,41 +909,52 @@ class _ChatScreenState extends State<ChatScreen> {
 
           const SizedBox(width: 8),
 
+          // TEXT FIELD
           Expanded(
             child: TextField(
               controller: messageController,
               minLines: 1,
               maxLines: 5,
+              textCapitalization: TextCapitalization.sentences,
               decoration: InputDecoration(
-                hintText: "Message everyone...",
+                hintText: canSend
+                    ? "Message everyone..."
+                    : "Waiting for people...",
+
                 filled: true,
+
                 fillColor: const Color(0xFFF1F3F6),
+
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 18,
                   vertical: 12,
                 ),
+
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(18),
                   borderSide: BorderSide.none,
                 ),
               ),
               onSubmitted: (_) {
-                sendMessage();
+                if (canSend) {
+                  sendMessage();
+                }
               },
             ),
           ),
 
           const SizedBox(width: 8),
 
+          // SEND BUTTON
           Container(
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: const Color(0xFF1565C0),
+              color: canSend ? const Color(0xFF1565C0) : Colors.grey.shade400,
               borderRadius: BorderRadius.circular(16),
             ),
             child: IconButton(
-              onPressed: sendMessage,
+              onPressed: canSend ? sendMessage : null,
               icon: const Icon(Icons.send_rounded, color: Colors.white),
             ),
           ),
